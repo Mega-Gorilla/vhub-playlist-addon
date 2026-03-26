@@ -17,7 +17,14 @@ namespace Yamadev.YamaStream.Modules.PlaylistLoader
 
     private void Start()
     {
+      // UIController を探す: まず親階層、なければ YamaPlayer 配下を検索
       _uiController = GetComponentInParent<UIController>();
+      if (!Utilities.IsValid(_uiController) && Utilities.IsValid(_loader))
+      {
+        var yamaPlayer = _loader.GetComponentInParent<YamaPlayer>();
+        if (Utilities.IsValid(yamaPlayer))
+          _uiController = yamaPlayer.GetComponentInChildren<UIController>();
+      }
     }
 
     public void OnPlaylistUrlSubmit()

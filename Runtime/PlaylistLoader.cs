@@ -164,6 +164,7 @@ namespace Yamadev.YamaStream.Modules.PlaylistLoader
       }
 
       _controller.TakeOwnership();
+      queue.TakeOwnership();
       // 本家 YamaPlayer の AddTrack() を使用 (本体変更不要)
       for (int i = 0; i < tracks.Length; i++)
       {
