@@ -3,8 +3,6 @@ using UnityEngine;
 using UnityEngine.UI;
 using VRC.SDK3.Components;
 using VRC.SDKBase;
-using Yamadev.YamaStream;
-using Yamadev.YamaStream.UI;
 
 namespace Yamadev.YamaStream.Modules.PlaylistLoader
 {
@@ -12,23 +10,9 @@ namespace Yamadev.YamaStream.Modules.PlaylistLoader
   public class PlaylistLoaderUI : UdonSharpBehaviour
   {
     [SerializeField] private PlaylistLoader _loader;
-    [SerializeField, RegisterEvent(nameof(VRCUrlInputField.onEndEdit), nameof(OnPlaylistUrlSubmit))]
-    private VRCUrlInputField _playlistUrlInput;
+    [SerializeField] private VRCUrlInputField _playlistUrlInput;
     [SerializeField] private Text _statusText;
     [SerializeField] private float _notificationDuration = 5f;
-
-    private UIController _uiController;
-
-    private void Start()
-    {
-      _uiController = GetComponentInParent<UIController>();
-      if (!Utilities.IsValid(_uiController) && Utilities.IsValid(_loader))
-      {
-        var yamaPlayer = _loader.GetComponentInParent<YamaPlayer>();
-        if (Utilities.IsValid(yamaPlayer))
-          _uiController = yamaPlayer.GetComponentInChildren<UIController>();
-      }
-    }
 
     public void OnPlaylistUrlSubmit()
     {
@@ -43,10 +27,6 @@ namespace Yamadev.YamaStream.Modules.PlaylistLoader
     public void ShowNotification(string message)
     {
       Debug.Log($"[PlaylistLoader] {message}");
-
-      if (Utilities.IsValid(_uiController))
-        _uiController.ShowMessage("Playlist Loader", message);
-
       if (Utilities.IsValid(_statusText))
       {
         _statusText.text = message;
