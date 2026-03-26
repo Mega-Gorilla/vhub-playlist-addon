@@ -131,11 +131,13 @@ namespace Vhub.PlaylistLoader.Editor
         Debug.LogWarning("[PlaylistLoader Installer] PlaylistLoaderInput に VRCUrlInputField が見つかりません。");
       }
 
-      // 13. _statusText 参照を接続 (Prefab 内の Text コンポーネントを検索)
-      var statusText = inputInstance.GetComponentInChildren<Text>(true);
-      if (statusText != null)
+      // 13. _statusText 参照を接続 (Tooltip 配下の Text を名前付きパスで特定)
+      var tooltipTransform = inputInstance.transform.Find("Tooltip");
+      if (tooltipTransform != null)
       {
-        SetField(loaderUI, typeof(PlaylistLoaderUI), "_statusText", statusText);
+        var statusText = tooltipTransform.GetComponentInChildren<Text>(true);
+        if (statusText != null)
+          SetField(loaderUI, typeof(PlaylistLoaderUI), "_statusText", statusText);
       }
 
       EditorUtility.SetDirty(loaderGo);
