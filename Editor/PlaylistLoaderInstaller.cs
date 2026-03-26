@@ -1,5 +1,7 @@
 using UnityEditor;
+using UnityEditor.Events;
 using UnityEngine;
+using VRC.Udon;
 using Yamadev.YamaStream;
 using Yamadev.YamaStream.Modules.PlaylistLoader;
 
@@ -54,8 +56,16 @@ namespace Vhub.PlaylistLoader.Editor
       // 6. PlaylistLoaderUI コンポーネントを追加
       var loaderUI = loaderGo.AddComponent<PlaylistLoaderUI>();
 
-      // 7. Controller 参照を設定
-      SetField(loader, typeof(YamaPlayerModule), "_controller", controller);
+      // 7. Controller の UdonBehaviour 参照を設定
+      var controllerUdon = controller.GetComponent<UdonBehaviour>();
+      if (controllerUdon == null)
+      {
+        Debug.LogError("[PlaylistLoader Installer] Controller に UdonBehaviour が見つかりません。");
+        EditorUtility.DisplayDialog("Install Error",
+          "Controller に UdonBehaviour が見つかりません。", "OK");
+        return;
+      }
+      SetField(loader, typeof(Yamadev.YamaStream.Modules.PlaylistLoader.PlaylistLoader), "_controller", controllerUdon);
 
       // 8. _ui 参照を設定
       SetField(loader, typeof(Yamadev.YamaStream.Modules.PlaylistLoader.PlaylistLoader), "_ui", loaderUI);
@@ -92,6 +102,18 @@ namespace Vhub.PlaylistLoader.Editor
       if (urlInput != null)
       {
         SetField(loaderUI, typeof(PlaylistLoaderUI), "_playlistUrlInput", urlInput);
+
+        // 12. onEndEdit イベントを PlaylistLoaderUI.OnPlaylistUrlSubmit に接続
+        var uiUdon = loaderUI.GetComponent<UdonBehaviour>();
+        if (uiUdon != null)
+        {
+          UnityEventTools.AddStringPersistentListener(
+              urlInput.onEndEdit, uiUdon.SendCustomEvent, "OnPlaylistUrlSubmit");
+        }
+        else
+        {
+          Debug.LogWarning("[PlaylistLoader Installer] PlaylistLoaderUI の UdonBehaviour が見つかりません。onEndEdit イベントを手動で接続してください。");
+        }
       }
       else
       {

@@ -3,13 +3,15 @@ using UnityEngine;
 using VRC.SDK3.Data;
 using VRC.SDK3.StringLoading;
 using VRC.SDKBase;
+using VRC.Udon;
 using VRC.Udon.Common.Interfaces;
 
 namespace Yamadev.YamaStream.Modules.PlaylistLoader
 {
   [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
-  public class PlaylistLoader : YamaPlayerModule
+  public class PlaylistLoader : UdonSharpBehaviour
   {
+    [SerializeField] private UdonBehaviour _controller;
     [SerializeField] private PlaylistLoaderUI _ui;
     [SerializeField] private VRCUrl[] _redirectPool = new VRCUrl[0];
     [SerializeField] private string _poolId = "default";
@@ -133,8 +135,8 @@ namespace Yamadev.YamaStream.Modules.PlaylistLoader
             && t.TokenType == TokenType.String)
           title = t.String;
 
-        tempTracks[addedCount] = TrackUtils.NewTrack(
-            (VideoPlayerType)mode, title, _redirectPool[index]);
+        // track format: [VideoPlayerType(int), title, VRCUrl]
+        tempTracks[addedCount] = new object[] { mode, title, _redirectPool[index] };
         addedCount++;
       }
 
@@ -155,7 +157,14 @@ namespace Yamadev.YamaStream.Modules.PlaylistLoader
 
     private void EnqueueAndPlay(object[][] tracks, int totalCount, int failedCount)
     {
-      var queue = _controller.Queue;
+      if (!Utilities.IsValid(_controller))
+      {
+        PrintError("Controller is not available.");
+        NotifyUI("Controller is not available.");
+        return;
+      }
+
+      var queue = (UdonBehaviour)_controller.GetProgramVariable("_queue");
       if (!Utilities.IsValid(queue))
       {
         PrintError("Queue is not available.");
@@ -163,21 +172,19 @@ namespace Yamadev.YamaStream.Modules.PlaylistLoader
         return;
       }
 
-      _controller.TakeOwnership();
-      queue.TakeOwnership();
-      // 本家 YamaPlayer の AddTrack() を使用 (本体変更不要)
+      _controller.SendCustomEvent("TakeOwnership");
+      Networking.SetOwner(Networking.LocalPlayer, queue.gameObject);
+
       for (int i = 0; i < tracks.Length; i++)
       {
-        queue.AddTrack(tracks[i]);
+        AddTrackToQueue(queue, tracks[i]);
       }
 
-      // 自動再生仕様:
-      // - プレイヤーが停止中 (Stopped) の場合のみ自動再生する
-      // - Forward() は Queue 先頭を取り出して再生する
-      // - 既に再生中・一時停止中の場合はキューに追加するのみ
-      if (_controller.Stopped)
+      // 自動再生: Idle(0) の場合のみ Forward で再生開始
+      int state = (int)_controller.GetProgramVariable("_syncedState");
+      if (state == 0)
       {
-        _controller.Forward();
+        _controller.SendCustomEvent("Forward");
       }
 
       var message = failedCount > 0
@@ -185,6 +192,16 @@ namespace Yamadev.YamaStream.Modules.PlaylistLoader
           : $"Added {tracks.Length} tracks to queue";
       PrintLog(message);
       NotifyUI(message);
+    }
+
+    private void AddTrackToQueue(UdonBehaviour queue, object[] track)
+    {
+      object[][] currentTracks = (object[][])queue.GetProgramVariable("_tracks");
+      int len = currentTracks != null ? currentTracks.Length : 0;
+      object[][] newTracks = new object[len + 1][];
+      for (int i = 0; i < len; i++) newTracks[i] = currentTracks[i];
+      newTracks[len] = track;
+      queue.SetProgramVariable("_tracks", newTracks);
     }
 
     private void NotifyUI(string message)
@@ -201,5 +218,9 @@ namespace Yamadev.YamaStream.Modules.PlaylistLoader
       if (token.TokenType == TokenType.Long) return (int)token.Long;
       return defaultValue;
     }
+
+    private void PrintLog(string msg) => Debug.Log($"[PlaylistLoader] {msg}");
+    private void PrintWarning(string msg) => Debug.LogWarning($"[PlaylistLoader] {msg}");
+    private void PrintError(string msg) => Debug.LogError($"[PlaylistLoader] {msg}");
   }
 }
