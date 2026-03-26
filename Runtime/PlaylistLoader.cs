@@ -209,54 +209,21 @@ namespace Yamadev.YamaStream.Modules.PlaylistLoader
       _controller.SendCustomEvent("TakeOwnership");
       Networking.SetOwner(Networking.LocalPlayer, queue.gameObject);
 
-      for (int i = 0; i < tracks.Length; i++)
-      {
-        AddTrackToQueue(queue, tracks[i]);
-      }
-
-      // リスナー通知 (queue UI 更新)
-      BroadcastQueueUpdated();
-
-      // 注意: RequestSerialization は UdonSharp の extern call であり
-      // SendCustomEvent では呼べないため、ネットワーク同期は Forward() 経由で行われる。
-      // - Stopped 時: 下の Forward() → RemoveTrack → RequestSerialization で即座に同期
-      // - Playing 時: 次のトラック切替時に同期される (遅延あり)
+      // Batch relay: QueueList.AddPendingTracks() 経由で AddTrack 相当を実行
+      // RequestSerialization + AfterQueueUpdated は QueueList 側で正しく処理される
+      queue.SetProgramVariable("_pendingTracks", tracks);
+      queue.SendCustomEvent("AddPendingTracks");
 
       // 自動再生: Idle(0) の場合のみ Forward で再生開始
       int state = (int)_controller.GetProgramVariable("_syncedState");
       if (state == 0)
-      {
         _controller.SendCustomEvent("Forward");
-      }
 
       var message = failedCount > 0
           ? $"Added {tracks.Length}/{totalCount} tracks ({failedCount} failed)"
           : $"Added {tracks.Length} tracks to queue";
       PrintLog(message);
       NotifyUI(message);
-    }
-
-    private void AddTrackToQueue(UdonBehaviour queue, object[] track)
-    {
-      object[][] currentTracks = (object[][])queue.GetProgramVariable("_tracks");
-      int len = currentTracks != null ? currentTracks.Length : 0;
-      object[][] newTracks = new object[len + 1][];
-      for (int i = 0; i < len; i++) newTracks[i] = currentTracks[i];
-      newTracks[len] = track;
-      queue.SetProgramVariable("_tracks", newTracks);
-    }
-
-    private void BroadcastQueueUpdated()
-    {
-      // Controller._listeners に登録された全リスナーに AfterQueueUpdated を通知
-      // 本家 Controller.SendCustomVideoEvent(nameof(AfterQueueUpdated)) と同等
-      var listeners = (UdonBehaviour[])_controller.GetProgramVariable("_listeners");
-      if (listeners == null) return;
-      for (int i = 0; i < listeners.Length; i++)
-      {
-        if (Utilities.IsValid(listeners[i]))
-          listeners[i].SendCustomEvent("AfterQueueUpdated");
-      }
     }
 
     private void NotifyUI(string message)
