@@ -1,6 +1,7 @@
 using UnityEditor;
 using UnityEditor.Events;
 using UnityEngine;
+using UnityEngine.UI;
 using VRC.Udon;
 using Yamadev.YamaStream;
 using Yamadev.YamaStream.Modules.PlaylistLoader;
@@ -128,6 +129,13 @@ namespace Vhub.PlaylistLoader.Editor
       else
       {
         Debug.LogWarning("[PlaylistLoader Installer] PlaylistLoaderInput に VRCUrlInputField が見つかりません。");
+      }
+
+      // 13. _statusText 参照を接続 (Prefab 内の Text コンポーネントを検索)
+      var statusText = inputInstance.GetComponentInChildren<Text>(true);
+      if (statusText != null)
+      {
+        SetField(loaderUI, typeof(PlaylistLoaderUI), "_statusText", statusText);
       }
 
       EditorUtility.SetDirty(loaderGo);

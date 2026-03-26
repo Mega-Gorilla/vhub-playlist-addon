@@ -214,12 +214,13 @@ namespace Yamadev.YamaStream.Modules.PlaylistLoader
         AddTrackToQueue(queue, tracks[i]);
       }
 
-      // Queue の同期とリスナー通知 (本家 QueueList.AddTrack の副作用を再現)
-      if (Networking.IsOwner(queue.gameObject))
-      {
-        queue.SendCustomEvent("RequestSerialization");
-      }
+      // リスナー通知 (queue UI 更新)
       BroadcastQueueUpdated();
+
+      // 注意: RequestSerialization は UdonSharp の extern call であり
+      // SendCustomEvent では呼べないため、ネットワーク同期は Forward() 経由で行われる。
+      // - Stopped 時: 下の Forward() → RemoveTrack → RequestSerialization で即座に同期
+      // - Playing 時: 次のトラック切替時に同期される (遅延あり)
 
       // 自動再生: Idle(0) の場合のみ Forward で再生開始
       int state = (int)_controller.GetProgramVariable("_syncedState");
