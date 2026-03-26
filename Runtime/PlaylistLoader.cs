@@ -25,6 +25,40 @@ namespace Yamadev.YamaStream.Modules.PlaylistLoader
     public string PoolId => _poolId;
     public bool IsLoading => _isLoading;
 
+    private void Start()
+    {
+      if (Utilities.IsValid(_controller)) return;
+
+      _controller = FindControllerInParentHierarchy();
+      if (!Utilities.IsValid(_controller))
+      {
+        PrintError("Controller が見つかりません。YamaPlayer の子階層に配置されているか確認してください。");
+      }
+      else
+      {
+        PrintLog("Controller を自動検出しました。");
+      }
+    }
+
+    private UdonBehaviour FindControllerInParentHierarchy()
+    {
+      // PlaylistLoader は YamaPlayer の子階層に配置される前提
+      // 親を遡り、その配下から Controller (= _queue を持つ UdonBehaviour) を検出
+      var current = transform.parent;
+      while (Utilities.IsValid(current))
+      {
+        var udons = current.GetComponentsInChildren<UdonBehaviour>(true);
+        for (int i = 0; i < udons.Length; i++)
+        {
+          if (udons[i] == null) continue;
+          var queue = udons[i].GetProgramVariable("_queue");
+          if (queue != null) return udons[i];
+        }
+        current = current.parent;
+      }
+      return null;
+    }
+
     public void LoadPlaylistFromUrl(VRCUrl resolveUrl)
     {
       if (_isLoading)

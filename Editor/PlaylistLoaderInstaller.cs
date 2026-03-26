@@ -56,16 +56,16 @@ namespace Vhub.PlaylistLoader.Editor
       // 6. PlaylistLoaderUI コンポーネントを追加
       var loaderUI = loaderGo.AddComponent<PlaylistLoaderUI>();
 
-      // 7. Controller の UdonBehaviour 参照を設定
+      // 7. Controller の UdonBehaviour 参照を設定 (未設定でもランタイムで自動検出される)
       var controllerUdon = controller.GetComponent<UdonBehaviour>();
-      if (controllerUdon == null)
+      if (controllerUdon != null)
       {
-        Debug.LogError("[PlaylistLoader Installer] Controller に UdonBehaviour が見つかりません。");
-        EditorUtility.DisplayDialog("Install Error",
-          "Controller に UdonBehaviour が見つかりません。", "OK");
-        return;
+        SetField(loader, typeof(Yamadev.YamaStream.Modules.PlaylistLoader.PlaylistLoader), "_controller", controllerUdon);
       }
-      SetField(loader, typeof(Yamadev.YamaStream.Modules.PlaylistLoader.PlaylistLoader), "_controller", controllerUdon);
+      else
+      {
+        Debug.LogWarning("[PlaylistLoader Installer] Controller の UdonBehaviour が見つかりません。ランタイムで自動検出されます。");
+      }
 
       // 8. _ui 参照を設定
       SetField(loader, typeof(Yamadev.YamaStream.Modules.PlaylistLoader.PlaylistLoader), "_ui", loaderUI);
