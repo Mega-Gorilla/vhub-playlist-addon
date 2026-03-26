@@ -1,7 +1,6 @@
 using UnityEditor;
-using UnityEditor.Events;
 using UnityEngine;
-using VRC.Udon;
+using UnityEngine.UI;
 using Yamadev.YamaStream;
 using Yamadev.YamaStream.Modules.PlaylistLoader;
 
@@ -44,7 +43,7 @@ namespace Vhub.PlaylistLoader.Editor
       YamaPlayer yamaPlayer = ResolveTargetPlayer(candidates);
       if (yamaPlayer == null) return;
 
-      // 3. Controller を取得
+      // 4. Controller を取得
       var controller = yamaPlayer.GetComponentInChildren<Controller>();
       if (controller == null)
       {
@@ -55,35 +54,27 @@ namespace Vhub.PlaylistLoader.Editor
 
       Undo.SetCurrentGroupName("Install PlaylistLoader");
 
-      // 4. PlaylistLoader GameObject を作成
+      // 5. PlaylistLoader GameObject を作成
       var loaderGo = new GameObject("PlaylistLoader");
       loaderGo.transform.SetParent(yamaPlayer.transform);
       Undo.RegisterCreatedObjectUndo(loaderGo, "Create PlaylistLoader");
 
-      // 5. PlaylistLoader コンポーネントを追加
+      // 6. PlaylistLoader コンポーネントを追加
       var loader = loaderGo.AddComponent<Yamadev.YamaStream.Modules.PlaylistLoader.PlaylistLoader>();
 
-      // 6. PlaylistLoaderUI コンポーネントを追加
+      // 7. PlaylistLoaderUI コンポーネントを追加
       var loaderUI = loaderGo.AddComponent<PlaylistLoaderUI>();
 
-      // 7. Controller の UdonBehaviour 参照を設定 (未設定でもランタイムで自動検出される)
-      var controllerUdon = controller.GetComponent<UdonBehaviour>();
-      if (controllerUdon != null)
-      {
-        SetField(loader, typeof(Yamadev.YamaStream.Modules.PlaylistLoader.PlaylistLoader), "_controller", controllerUdon);
-      }
-      else
-      {
-        Debug.LogWarning("[PlaylistLoader Installer] Controller の UdonBehaviour が見つかりません。ランタイムで自動検出されます。");
-      }
+      // 8. Controller 参照を設定 (未設定でもランタイムで自動検出される)
+      SetField(loader, typeof(Yamadev.YamaStream.Modules.PlaylistLoader.PlaylistLoader), "_controller", controller);
 
-      // 8. _ui 参照を設定
+      // 9. _ui 参照を設定
       SetField(loader, typeof(Yamadev.YamaStream.Modules.PlaylistLoader.PlaylistLoader), "_ui", loaderUI);
 
-      // 9. _loader 参照を設定
+      // 10. _loader 参照を設定
       SetField(loaderUI, typeof(PlaylistLoaderUI), "_loader", loader);
 
-      // 10. PlaylistLoaderInput prefab を UI 階層に配置
+      // 11. PlaylistLoaderInput prefab を UI 階層に配置
       var container = yamaPlayer.transform.Find(PlaylistLoaderInputPath);
       if (container == null)
       {
@@ -107,27 +98,26 @@ namespace Vhub.PlaylistLoader.Editor
       inputInstance.name = "PlaylistLoaderInput";
       Undo.RegisterCreatedObjectUndo(inputInstance, "Create PlaylistLoaderInput");
 
-      // 11. _playlistUrlInput 参照を接続
+      // 12. _playlistUrlInput 参照を接続
       var urlInput = inputInstance.GetComponent<VRC.SDK3.Components.VRCUrlInputField>();
       if (urlInput != null)
       {
         SetField(loaderUI, typeof(PlaylistLoaderUI), "_playlistUrlInput", urlInput);
-
-        // 12. onEndEdit イベントを PlaylistLoaderUI.OnPlaylistUrlSubmit に接続
-        var uiUdon = loaderUI.GetComponent<UdonBehaviour>();
-        if (uiUdon != null)
-        {
-          UnityEventTools.AddStringPersistentListener(
-              urlInput.onEndEdit, uiUdon.SendCustomEvent, "OnPlaylistUrlSubmit");
-        }
-        else
-        {
-          Debug.LogWarning("[PlaylistLoader Installer] PlaylistLoaderUI の UdonBehaviour が見つかりません。onEndEdit イベントを手動で接続してください。");
-        }
       }
       else
       {
         Debug.LogWarning("[PlaylistLoader Installer] PlaylistLoaderInput に VRCUrlInputField が見つかりません。");
+      }
+
+      // 13. _statusText 参照を接続 (Prefab 内の Text コンポーネントを検索)
+      var statusText = inputInstance.GetComponentInChildren<Text>(true);
+      if (statusText != null)
+      {
+        SetField(loaderUI, typeof(PlaylistLoaderUI), "_statusText", statusText);
+      }
+      else
+      {
+        Debug.LogWarning("[PlaylistLoader Installer] PlaylistLoaderInput に Text コンポーネントが見つかりません。通知は UIController.ShowMessage のみで動作します。");
       }
 
       EditorUtility.SetDirty(loaderGo);
@@ -143,7 +133,6 @@ namespace Vhub.PlaylistLoader.Editor
     {
       if (candidates.Count == 1) return candidates[0];
 
-      // Hierarchy で選択中のオブジェクトが候補の YamaPlayer 配下なら、それを優先
       var selected = Selection.activeGameObject;
       if (selected != null)
       {
@@ -154,7 +143,6 @@ namespace Vhub.PlaylistLoader.Editor
         }
       }
 
-      // 選択なし or 無関係なオブジェクトが選択中 → ユーザーに選択を促す
       var names = new string[candidates.Count];
       for (int i = 0; i < candidates.Count; i++)
         names[i] = candidates[i].gameObject.name;

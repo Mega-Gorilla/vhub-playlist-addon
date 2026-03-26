@@ -3,7 +3,6 @@ using UnityEngine;
 using VRC.SDK3.Data;
 using VRC.SDK3.StringLoading;
 using VRC.SDKBase;
-using VRC.Udon;
 using VRC.Udon.Common.Interfaces;
 
 namespace Yamadev.YamaStream.Modules.PlaylistLoader
@@ -11,7 +10,7 @@ namespace Yamadev.YamaStream.Modules.PlaylistLoader
   [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
   public class PlaylistLoader : UdonSharpBehaviour
   {
-    [SerializeField] private UdonBehaviour _controller;
+    [SerializeField] private Controller _controller;
     [SerializeField] private PlaylistLoaderUI _ui;
     [SerializeField] private VRCUrl[] _redirectPool = new VRCUrl[0];
     [SerializeField] private string _poolId = "default";
@@ -29,48 +28,30 @@ namespace Yamadev.YamaStream.Modules.PlaylistLoader
     {
       if (Utilities.IsValid(_controller)) return;
 
-      _controller = FindControllerInParentHierarchy();
-      if (!Utilities.IsValid(_controller))
-      {
-        PrintError("Controller が見つかりません。YamaPlayer の子階層に配置されているか確認してください。");
-      }
-      else
-      {
-        PrintLog("Controller を自動検出しました。");
-      }
-    }
-
-    private UdonBehaviour FindControllerInParentHierarchy()
-    {
       // PlaylistLoader は YamaPlayer の子階層に配置される前提
-      // 親を遡り、その配下から Controller (= _queue を持つ UdonBehaviour) を検出
-      var current = transform.parent;
-      while (Utilities.IsValid(current))
-      {
-        var udons = current.GetComponentsInChildren<UdonBehaviour>(true);
-        for (int i = 0; i < udons.Length; i++)
-        {
-          if (udons[i] == null) continue;
-          var queue = udons[i].GetProgramVariable("_queue");
-          if (queue != null) return udons[i];
-        }
-        current = current.parent;
-      }
-      return null;
+      // 親階層から YamaPlayer を検出し、その配下の Controller を自動取得
+      var yamaPlayer = GetComponentInParent<YamaPlayer>();
+      if (Utilities.IsValid(yamaPlayer))
+        _controller = yamaPlayer.GetComponentInChildren<Controller>();
+
+      if (!Utilities.IsValid(_controller))
+        Debug.LogError("[PlaylistLoader] Controller が見つかりません。YamaPlayer の子階層に配置されているか確認してください。");
+      else
+        Debug.Log("[PlaylistLoader] Controller を自動検出しました。");
     }
 
     public void LoadPlaylistFromUrl(VRCUrl resolveUrl)
     {
       if (_isLoading)
       {
-        PrintWarning("Already loading a playlist.");
+        Debug.LogWarning("[PlaylistLoader] Already loading a playlist.");
         return;
       }
 
       _isLoading = true;
       _pendingResolveUrl = resolveUrl;
       VRCStringDownloader.LoadUrl(resolveUrl, (IUdonEventReceiver)this);
-      PrintLog($"Downloading playlist from {resolveUrl.Get()}...");
+      Debug.Log($"[PlaylistLoader] Downloading playlist from {resolveUrl.Get()}...");
     }
 
     public override void OnStringLoadSuccess(IVRCStringDownload result)
@@ -96,7 +77,7 @@ namespace Yamadev.YamaStream.Modules.PlaylistLoader
         return;
 
       _isLoading = false;
-      PrintError($"Failed to download playlist: {result.Error}");
+      Debug.LogError($"[PlaylistLoader] Failed to download playlist: {result.Error}");
       NotifyUI("Playlist server is unavailable.");
     }
 
@@ -107,7 +88,7 @@ namespace Yamadev.YamaStream.Modules.PlaylistLoader
       if (!VRCJson.TryDeserializeFromJson(json, out DataToken root)
           || root.TokenType != TokenType.DataDictionary)
       {
-        PrintError("Failed to parse playlist response.");
+        Debug.LogError("[PlaylistLoader] Failed to parse playlist response.");
         NotifyUI("Failed to parse playlist response.");
         return false;
       }
@@ -122,7 +103,7 @@ namespace Yamadev.YamaStream.Modules.PlaylistLoader
         if (rootDict.TryGetValue("error", out DataToken errToken)
             && errToken.TokenType == TokenType.String)
           error = errToken.String;
-        PrintError(error);
+        Debug.LogError($"[PlaylistLoader] {error}");
         NotifyUI(error);
         return false;
       }
@@ -131,7 +112,7 @@ namespace Yamadev.YamaStream.Modules.PlaylistLoader
           || tracksToken.TokenType != TokenType.DataList
           || tracksToken.DataList.Count == 0)
       {
-        PrintWarning("No tracks found in playlist.");
+        Debug.LogWarning("[PlaylistLoader] No tracks found in playlist.");
         NotifyUI("No tracks found in playlist.");
         return false;
       }
@@ -169,8 +150,8 @@ namespace Yamadev.YamaStream.Modules.PlaylistLoader
             && t.TokenType == TokenType.String)
           title = t.String;
 
-        // track format: [VideoPlayerType(int), title, VRCUrl]
-        tempTracks[addedCount] = new object[] { mode, title, _redirectPool[index] };
+        tempTracks[addedCount] = TrackUtils.NewTrack(
+            (VideoPlayerType)mode, title, _redirectPool[index]);
         addedCount++;
       }
 
@@ -179,7 +160,7 @@ namespace Yamadev.YamaStream.Modules.PlaylistLoader
         string msg = failedCount > 0
             ? $"No tracks could be added ({failedCount} skipped)"
             : "No valid tracks to add.";
-        PrintWarning(msg);
+        Debug.LogWarning($"[PlaylistLoader] {msg}");
         NotifyUI(msg);
         return null;
       }
@@ -191,71 +172,31 @@ namespace Yamadev.YamaStream.Modules.PlaylistLoader
 
     private void EnqueueAndPlay(object[][] tracks, int totalCount, int failedCount)
     {
-      if (!Utilities.IsValid(_controller))
-      {
-        PrintError("Controller is not available.");
-        NotifyUI("Controller is not available.");
-        return;
-      }
-
-      var queue = (UdonBehaviour)_controller.GetProgramVariable("_queue");
+      var queue = _controller.Queue;
       if (!Utilities.IsValid(queue))
       {
-        PrintError("Queue is not available.");
+        Debug.LogError("[PlaylistLoader] Queue is not available.");
         NotifyUI("Queue is not available.");
         return;
       }
 
-      _controller.SendCustomEvent("TakeOwnership");
-      Networking.SetOwner(Networking.LocalPlayer, queue.gameObject);
-
+      _controller.TakeOwnership();
+      queue.TakeOwnership();
       for (int i = 0; i < tracks.Length; i++)
       {
-        AddTrackToQueue(queue, tracks[i]);
+        queue.AddTrack(tracks[i]);
       }
 
-      // Queue の同期とリスナー通知 (本家 QueueList.AddTrack の副作用を再現)
-      if (Networking.IsOwner(queue.gameObject))
+      if (_controller.Stopped)
       {
-        queue.SendCustomEvent("RequestSerialization");
-      }
-      BroadcastQueueUpdated();
-
-      // 自動再生: Idle(0) の場合のみ Forward で再生開始
-      int state = (int)_controller.GetProgramVariable("_syncedState");
-      if (state == 0)
-      {
-        _controller.SendCustomEvent("Forward");
+        _controller.Forward();
       }
 
       var message = failedCount > 0
           ? $"Added {tracks.Length}/{totalCount} tracks ({failedCount} failed)"
           : $"Added {tracks.Length} tracks to queue";
-      PrintLog(message);
+      Debug.Log($"[PlaylistLoader] {message}");
       NotifyUI(message);
-    }
-
-    private void AddTrackToQueue(UdonBehaviour queue, object[] track)
-    {
-      object[][] currentTracks = (object[][])queue.GetProgramVariable("_tracks");
-      int len = currentTracks != null ? currentTracks.Length : 0;
-      object[][] newTracks = new object[len + 1][];
-      for (int i = 0; i < len; i++) newTracks[i] = currentTracks[i];
-      newTracks[len] = track;
-      queue.SetProgramVariable("_tracks", newTracks);
-    }
-
-    private void BroadcastQueueUpdated()
-    {
-      // Controller._listeners に登録された全リスナーに AfterQueueUpdated を通知
-      // 本家 Controller.SendCustomVideoEvent(nameof(AfterQueueUpdated)) と同等
-      var listeners = (UdonBehaviour[])_controller.GetProgramVariable("_listeners");
-      if (listeners == null) return;
-      for (int i = 0; i < listeners.Length; i++)
-      {
-        if (Utilities.IsValid(listeners[i]))
-          listeners[i].SendCustomEvent("AfterQueueUpdated");
-      }
     }
 
     private void NotifyUI(string message)
@@ -272,9 +213,5 @@ namespace Yamadev.YamaStream.Modules.PlaylistLoader
       if (token.TokenType == TokenType.Long) return (int)token.Long;
       return defaultValue;
     }
-
-    private void PrintLog(string msg) => Debug.Log($"[PlaylistLoader] {msg}");
-    private void PrintWarning(string msg) => Debug.LogWarning($"[PlaylistLoader] {msg}");
-    private void PrintError(string msg) => Debug.LogError($"[PlaylistLoader] {msg}");
   }
 }
