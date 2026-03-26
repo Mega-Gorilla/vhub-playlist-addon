@@ -1,5 +1,6 @@
 using UdonSharp;
 using UnityEngine;
+using UnityEngine.UI;
 using VRC.SDK3.Components;
 using VRC.SDKBase;
 
@@ -10,6 +11,8 @@ namespace Yamadev.YamaStream.Modules.PlaylistLoader
   {
     [SerializeField] private PlaylistLoader _loader;
     [SerializeField] private VRCUrlInputField _playlistUrlInput;
+    [SerializeField] private Text _statusText;
+    [SerializeField] private float _notificationDuration = 5f;
 
     public void OnPlaylistUrlSubmit()
     {
@@ -24,6 +27,17 @@ namespace Yamadev.YamaStream.Modules.PlaylistLoader
     public void ShowNotification(string message)
     {
       Debug.Log($"[PlaylistLoader] {message}");
+      if (Utilities.IsValid(_statusText))
+      {
+        _statusText.text = message;
+        SendCustomEventDelayedSeconds(nameof(ClearNotification), _notificationDuration);
+      }
+    }
+
+    public void ClearNotification()
+    {
+      if (Utilities.IsValid(_statusText))
+        _statusText.text = "";
     }
   }
 }

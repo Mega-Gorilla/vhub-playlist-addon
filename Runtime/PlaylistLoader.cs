@@ -214,6 +214,13 @@ namespace Yamadev.YamaStream.Modules.PlaylistLoader
         AddTrackToQueue(queue, tracks[i]);
       }
 
+      // Queue の同期とリスナー通知 (本家 QueueList.AddTrack の副作用を再現)
+      if (Networking.IsOwner(queue.gameObject))
+      {
+        queue.SendCustomEvent("RequestSerialization");
+      }
+      BroadcastQueueUpdated();
+
       // 自動再生: Idle(0) の場合のみ Forward で再生開始
       int state = (int)_controller.GetProgramVariable("_syncedState");
       if (state == 0)
@@ -236,6 +243,19 @@ namespace Yamadev.YamaStream.Modules.PlaylistLoader
       for (int i = 0; i < len; i++) newTracks[i] = currentTracks[i];
       newTracks[len] = track;
       queue.SetProgramVariable("_tracks", newTracks);
+    }
+
+    private void BroadcastQueueUpdated()
+    {
+      // Controller._listeners に登録された全リスナーに AfterQueueUpdated を通知
+      // 本家 Controller.SendCustomVideoEvent(nameof(AfterQueueUpdated)) と同等
+      var listeners = (UdonBehaviour[])_controller.GetProgramVariable("_listeners");
+      if (listeners == null) return;
+      for (int i = 0; i < listeners.Length; i++)
+      {
+        if (Utilities.IsValid(listeners[i]))
+          listeners[i].SendCustomEvent("AfterQueueUpdated");
+      }
     }
 
     private void NotifyUI(string message)
