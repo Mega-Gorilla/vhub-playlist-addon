@@ -16,23 +16,33 @@ namespace Vhub.PlaylistLoader.Editor
     [MenuItem(MenuPath)]
     public static void Install()
     {
-      // 1. シーン内の YamaPlayer を検出
-      var yamaPlayer = Object.FindObjectOfType<YamaPlayer>();
-      if (yamaPlayer == null)
+      // 1. シーン内の YamaPlayer を全件検出
+      var allPlayers = Object.FindObjectsOfType<YamaPlayer>();
+      if (allPlayers.Length == 0)
       {
         EditorUtility.DisplayDialog("Install Error",
           "シーン内に YamaPlayer が見つかりません。\n\nYamaPlayer を先にシーンに配置してください。", "OK");
         return;
       }
 
-      // 2. 二重導入チェック
-      var existingLoader = yamaPlayer.GetComponentInChildren<Yamadev.YamaStream.Modules.PlaylistLoader.PlaylistLoader>();
-      if (existingLoader != null)
+      // 2. 未導入の YamaPlayer だけを候補にする
+      var candidates = new System.Collections.Generic.List<YamaPlayer>();
+      foreach (var p in allPlayers)
+      {
+        if (p.GetComponentInChildren<Yamadev.YamaStream.Modules.PlaylistLoader.PlaylistLoader>() == null)
+          candidates.Add(p);
+      }
+
+      if (candidates.Count == 0)
       {
         EditorUtility.DisplayDialog("Install Warning",
-          "PlaylistLoader は既にインストール済みです。\n\n再インストールする場合は、先に既存の PlaylistLoader を削除してください。", "OK");
+          "全ての YamaPlayer に PlaylistLoader が導入済みです。\n\n再インストールする場合は、先に既存の PlaylistLoader を削除してください。", "OK");
         return;
       }
+
+      // 3. 対象の YamaPlayer を決定
+      YamaPlayer yamaPlayer = ResolveTargetPlayer(candidates);
+      if (yamaPlayer == null) return;
 
       // 3. Controller を取得
       var controller = yamaPlayer.GetComponentInChildren<Controller>();
@@ -127,6 +137,33 @@ namespace Vhub.PlaylistLoader.Editor
       Debug.Log("[PlaylistLoader Installer] インストール完了");
       EditorUtility.DisplayDialog("Install Complete",
         "PlaylistLoader をインストールしました。\n\n次の手順:\n1. Inspector で Pool ID を確認\n2. Generate Pool を実行", "OK");
+    }
+
+    private static YamaPlayer ResolveTargetPlayer(System.Collections.Generic.List<YamaPlayer> candidates)
+    {
+      if (candidates.Count == 1) return candidates[0];
+
+      // Hierarchy で選択中のオブジェクトが候補の YamaPlayer 配下なら、それを優先
+      var selected = Selection.activeGameObject;
+      if (selected != null)
+      {
+        foreach (var candidate in candidates)
+        {
+          if (selected == candidate.gameObject || selected.transform.IsChildOf(candidate.transform))
+            return candidate;
+        }
+      }
+
+      // 選択なし or 無関係なオブジェクトが選択中 → ユーザーに選択を促す
+      var names = new string[candidates.Count];
+      for (int i = 0; i < candidates.Count; i++)
+        names[i] = candidates[i].gameObject.name;
+
+      EditorUtility.DisplayDialog("YamaPlayer を選択",
+        $"シーン内に {candidates.Count} 台の未導入 YamaPlayer があります:\n\n" +
+        string.Join("\n", names) +
+        "\n\nHierarchy で対象の YamaPlayer を選択してから再実行してください。", "OK");
+      return null;
     }
 
     private static void SetField(object target, System.Type type, string fieldName, object value)
